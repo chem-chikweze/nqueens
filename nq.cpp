@@ -2,8 +2,7 @@
 #include <vector>
 #include <thread>
 #include <atomic>
-#include <algorithm>
-#include <numeric>
+#include <bitset>
 #include <chrono>
 #include <cstdlib>
 #include <future>
@@ -14,29 +13,33 @@ using namespace chrono;
 int board_size;
 atomic<int> solutions_found(0);
 
-bool is_safe(const vector<int>& board) {
-    for (int i = 0; i < board.size(); i++) {
-        for (int j = i + 1; j < board.size(); j++) {
-            if (abs(board[i] - board[j]) == j - i || board[i] == board[j]) {
-                return false;
-            }
-        }
-    }
-    return true;
+bool is_safe(const bitset<64>& occupied_rows, const bitset<64>& occupied_diagonals1, const bitset<64>& occupied_diagonals2, int row, int col) {
+    return !occupied_rows[row] && !occupied_diagonals1[row + col] && !occupied_diagonals2[row - col + board_size - 1];
 }
 
-void solve_nqueens(const vector<int>& partial_solution) {
-    vector<int> solution = partial_solution;
-    vector<int> remaining(board_size - solution.size());
-    iota(remaining.begin(), remaining.end(), solution.empty() ? 1 : solution.back() + 1);
+void solve_nqueens(const bitset<64>& occupied_rows, const bitset<64>& occupied_diagonals1, const bitset<64>& occupied_diagonals2, int col) {
+    if (col == board_size) {
+        solutions_found++;
+        return;
+    }
 
-    do {
-        solution.insert(solution.end(), remaining.begin(), remaining.end());
-        if (is_safe(solution)) {
-            solutions_found++;
+    bitset<64> new_occupied_rows = occupied_rows;
+    bitset<64> new_occupied_diagonals1 = occupied_diagonals1;
+    bitset<64> new_occupied_diagonals2 = occupied_diagonals2;
+
+    for (int row = 0; row < board_size; row++) {
+        if (is_safe(occupied_rows, occupied_diagonals1, occupied_diagonals2, row, col)) {
+            new_occupied_rows.set(row);
+            new_occupied_diagonals1.set(row + col);
+            new_occupied_diagonals2.set(row - col + board_size - 1);
+
+            solve_nqueens(new_occupied_rows, new_occupied_diagonals1, new_occupied_diagonals2, col + 1);
+
+            new_occupied_rows.reset(row);
+            new_occupied_diagonals1.reset(row + col);
+            new_occupied_diagonals2.reset(row - col + board_size - 1);
         }
-        solution.resize(partial_solution.size());
-    } while (next_permutation(remaining.begin(), remaining.end()));
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -51,8 +54,10 @@ int main(int argc, char* argv[]) {
     vector<future<void>> futures;
     int num_threads = thread::hardware_concurrency();
 
+    bitset<64> initial_occupied_rows, initial_occupied_diagonals1, initial_occupied_diagonals2;
+
     for (int i = 0; i < num_threads; i++) {
-        futures.emplace_back(async(launch::async, solve_nqueens, vector<int>(i)));
+        futures.emplace_back(async(launch::async, solve_nqueens, initial_occupied_rows, initial_occupied_diagonals1, initial_occupied_diagonals2, i));
     }
 
     for (auto& fut : futures) {
