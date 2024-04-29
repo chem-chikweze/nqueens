@@ -1,94 +1,114 @@
 #include <iostream>
-#include <thread>
 #include <vector>
-#include <mutex>
 #include <queue>
-#include <functional>
+#include <thread>
 #include <atomic>
-#include <memory>
+#include <algorithm>
+#include <numeric>
+#include <mutex>
 #include <condition_variable>
 
-const int BOARD_SIZE = 8;
-std::vector<std::thread> workers;
-std::vector<std::queue<std::function<void()>>> messages;
-std::vector<std::unique_ptr<std::mutex>> queue_mutexes;
-std::vector<std::condition_variable> cond_vars;
-std::atomic<int> solutions_count{0};
-std::atomic<bool> stop_signal{false};
+std::mutex mtx;
+std::condition_variable cv;
+std::queue<std::vector<int>> work_queue;
+std::atomic<int> solutions_found(0);
+std::atomic<bool> finished(false);
 
-bool isSafe(int row, int col, std::vector<int>& positions) {
-    for (int i = 0; i < col; i++) {
-        if (positions[i] == row || abs(positions[i] - row) == abs(i - col))
-            return false;
+int board_size;
+
+bool is_safe(const std::vector<int> &board)
+{
+    for (int i = 0; i < board.size(); i++)
+    {
+        for (int j = i + 1; j < board.size(); j++)
+        {
+            if (std::abs(board[i] - board[j]) == j - i || board[i] == board[j])
+            {
+                return false;
+            }
+        }
     }
     return true;
 }
 
-void solveNQueens(int col, std::vector<int>& positions, int n) {
-    if (col == n) {
-        solutions_count++;
-        return;
-    }
-
-    for (int row = 0; row < n; ++row) {
-        if (isSafe(row, col, positions)) {
-            positions[col] = row;
-            solveNQueens(col + 1, positions, n);
-            positions[col] = -1;
-        }
-    }
-}
-
-void worker(int id) {
-    while (true) {
-        std::function<void()> job;
+void worker_thread()
+{
+    while (!finished)
+    {
+        std::vector<int> partial_solution;
         {
-            std::unique_lock<std::mutex> lock(*queue_mutexes[id]);
-            cond_vars[id].wait(lock, [&] { return !messages[id].empty() || stop_signal; });
-            if (stop_signal && messages[id].empty())
-                break;
-            job = std::move(messages[id].front());
-            messages[id].pop();
+            std::unique_lock<std::mutex> lck(mtx);
+            cv.wait(lck, [&]
+                    { return !work_queue.empty() || finished; });
+            if (finished && work_queue.empty())
+            {
+                return;
+            }
+            partial_solution = work_queue.front();
+            work_queue.pop();
         }
-        if (job)
-            job();
-    }
-}
 
-void distributeJobs(int n) {
-    for (int i = 0; i < n; ++i) {
-        std::vector<int> positions(n, -1);
-        int worker_id = i % workers.size();
+        int start_col = partial_solution.size();
+        std::vector<int> solution = partial_solution;
+        std::vector<int> remaining(board_size - start_col);
+        std::iota(remaining.begin(), remaining.end(), 1);
+
+        do
         {
-            std::lock_guard<std::mutex> lock(*queue_mutexes[worker_id]);
-            messages[worker_id].push([positions, n]() mutable { solveNQueens(0, positions, n); });
-            cond_vars[worker_id].notify_one();
-        }
+            for (int i = start_col; i < board_size; i++)
+            {
+                solution[i] = remaining[i - start_col];
+            }
+            if (is_safe(solution))
+            {
+                solutions_found++;
+            }
+        } while (std::next_permutation(remaining.begin(), remaining.end()));
     }
 }
 
-int main() {
-    int max_workers = std::thread::hardware_concurrency();
-    messages.resize(max_workers);
-    queue_mutexes.resize(max_workers);
-    cond_vars.resize(max_workers);
-
-    for (int i = 0; i < max_workers; ++i) {
-        queue_mutexes[i] = std::make_unique<std::mutex>();
-        workers.emplace_back(worker, i);
+int main(int argc, char *argv[])
+{
+    if (argc > 1)
+    {
+        board_size = std::stoi(argv[1]);
+    }
+    else
+    {
+        board_size = 8;
     }
 
-    distributeJobs(BOARD_SIZE);
+    int num_threads = std::thread::hardware_concurrency();
+    std::vector<std::thread> threads;
 
-    for (auto& worker : workers) {
-        worker.join();
+    for (int i = 0; i < num_threads; i++)
+    {
+        threads.emplace_back(worker_thread);
     }
 
-    std::cout << "Total solutions: " << solutions_count << std::endl;
+    std::vector<int> initial_config(board_size - 4);
+    std::iota(initial_config.begin(), initial_config.end(), 1);
+
+    do
+    {
+        work_queue.push(initial_config);
+    } while (std::next_permutation(initial_config.begin(), initial_config.end()));
+
+    {
+        std::unique_lock<std::mutex> lck(mtx);
+        finished = true;
+    }
+    cv.notify_all();
+
+    for (auto &t : threads)
+    {
+        t.join();
+    }
+
+    std::cout << "Total solutions found: " << solutions_found << std::endl;
+
     return 0;
 }
-
-
 // #include <iostream>
 // #include <thread>
 // #include <vector>
