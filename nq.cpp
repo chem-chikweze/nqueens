@@ -6,36 +6,32 @@
 #include <functional>
 #include <atomic>
 #include <memory>
+#include <condition_variable>
 
-const int BOARD_SIZE = 4;
+const int BOARD_SIZE = 8;
 std::vector<std::thread> workers;
 std::vector<std::queue<std::function<void()>>> messages;
 std::vector<std::unique_ptr<std::mutex>> queue_mutexes;
+std::vector<std::condition_variable> cond_vars;
 std::atomic<int> solutions_count{0};
 std::atomic<bool> stop_signal{false};
 
-bool isSafe(int row, int col, std::vector<int> &positions)
-{
-    for (int i = 0; i < col; i++)
-    {
+bool isSafe(int row, int col, std::vector<int>& positions) {
+    for (int i = 0; i < col; i++) {
         if (positions[i] == row || abs(positions[i] - row) == abs(i - col))
             return false;
     }
     return true;
 }
 
-void solveNQueens(int col, std::vector<int> &positions, int n)
-{
-    if (col == n)
-    {
+void solveNQueens(int col, std::vector<int>& positions, int n) {
+    if (col == n) {
         solutions_count++;
         return;
     }
 
-    for (int row = 0; row < n; ++row)
-    {
-        if (isSafe(row, col, positions))
-        {
+    for (int row = 0; row < n; ++row) {
+        if (isSafe(row, col, positions)) {
             positions[col] = row;
             solveNQueens(col + 1, positions, n);
             positions[col] = -1;
@@ -43,67 +39,55 @@ void solveNQueens(int col, std::vector<int> &positions, int n)
     }
 }
 
-void worker(int id)
-{
-    while (!stop_signal)
-    {
+void worker(int id) {
+    while (true) {
         std::function<void()> job;
         {
-            std::lock_guard<std::mutex> lock(*queue_mutexes[id]);
-            if (!messages[id].empty())
-            {
-                job = std::move(messages[id].front());
-                messages[id].pop();
-            }
+            std::unique_lock<std::mutex> lock(*queue_mutexes[id]);
+            cond_vars[id].wait(lock, [&] { return !messages[id].empty() || stop_signal; });
+            if (stop_signal && messages[id].empty())
+                break;
+            job = std::move(messages[id].front());
+            messages[id].pop();
         }
         if (job)
             job();
     }
 }
 
-void distributeJobs(int n)
-{
-    for (int i = 0; i < n; ++i)
-    {
+void distributeJobs(int n) {
+    for (int i = 0; i < n; ++i) {
         std::vector<int> positions(n, -1);
         int worker_id = i % workers.size();
-        std::lock_guard<std::mutex> lock(*queue_mutexes[worker_id]);
-        messages[worker_id].push([positions, n]() mutable
-                                 { solveNQueens(0, positions, n); });
+        {
+            std::lock_guard<std::mutex> lock(*queue_mutexes[worker_id]);
+            messages[worker_id].push([positions, n]() mutable { solveNQueens(0, positions, n); });
+            cond_vars[worker_id].notify_one();
+        }
     }
 }
 
-int main()
-{
+int main() {
     int max_workers = std::thread::hardware_concurrency();
     messages.resize(max_workers);
     queue_mutexes.resize(max_workers);
+    cond_vars.resize(max_workers);
 
-    for (int i = 0; i < max_workers; ++i)
-    {
+    for (int i = 0; i < max_workers; ++i) {
         queue_mutexes[i] = std::make_unique<std::mutex>();
         workers.emplace_back(worker, i);
     }
 
     distributeJobs(BOARD_SIZE);
 
-    // Ensure all jobs are finished
-    for (auto &queue : messages)
-    {
-        std::lock_guard<std::mutex> lock(*queue_mutexes[&queue - &messages[0]]);
-        while (!queue.empty())
-            ;
-    }
-
-    stop_signal = true;
-    for (auto &worker : workers)
-    {
+    for (auto& worker : workers) {
         worker.join();
     }
 
     std::cout << "Total solutions: " << solutions_count << std::endl;
     return 0;
 }
+
 
 // #include <iostream>
 // #include <thread>
