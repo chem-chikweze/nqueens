@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the source code file and the output binary name
-SOURCE="parallel_tasks.cpp.cpp"
+SOURCE="parallel_tasks.cpp"
 OUTPUT="nqueens2"
 
 # Compile the C++ program
