@@ -4,7 +4,7 @@
 using namespace std;
 using namespace chrono;
 
-#define N 8 // Board size
+#define N 11 // Board size
 
 bool isSafe(int board[], int row, int col) {
     for (int i = 0; i < col; i++) {
@@ -73,14 +73,14 @@ int main(int argc, char *argv[]) {
     auto start = high_resolution_clock::now();
     int count = solveNQueens();
     auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<nanoseconds>(stop - start);
+    auto duration = duration_cast<milliseconds>(stop - start);
 
     if (count != -1) {
         cout << "Number of solutions: " << count << endl;
     } else {
         cout << "No solution exists." << endl;
     }
-    cout << "Execution time: " << duration.count() << " nanoseconds" << endl;
+    cout << "Execution time: " << duration.count() << "  milliseconds" << endl;
     std::cout << "Sequential " << std::endl;
     return 0;
 }

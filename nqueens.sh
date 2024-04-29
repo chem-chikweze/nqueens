@@ -9,7 +9,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Set the default board size if no argument is provided
-board_size=4
+board_size=10
 
 # Check if an argument is provided
 if [ $# -eq 1 ]; then
