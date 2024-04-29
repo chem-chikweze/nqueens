@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Compile the C++ code
-g++ -std=c++11 -pthread -o nqueens dfs_with_work_stealing.cpp
+g++ -std=c++11 -pthread -o nqueens queue_work_stealing.cpp
 
 if [ $? -ne 0 ]; then
     echo "Compilation failed"
