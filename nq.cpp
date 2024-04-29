@@ -1,74 +1,100 @@
 #include <iostream>
 #include <vector>
+#include <queue>
 #include <thread>
 #include <atomic>
-#include <bitset>
+#include <algorithm>
+#include <numeric>
+#include <mutex>
+#include <condition_variable>
 #include <chrono>
-#include <cstdlib>
-#include <future>
+#include <cstdlib> // For atoi
 
 using namespace std;
 using namespace chrono;
 
-int board_size;
-atomic<int> solutions_found(0);
 
-bool is_safe(const bitset<64>& occupied_rows, const bitset<64>& occupied_diagonals1, const bitset<64>& occupied_diagonals2, int row, int col) {
-    return !occupied_rows[row] && !occupied_diagonals1[row + col] && !occupied_diagonals2[row - col + board_size - 1];
+std::mutex mtx;
+std::condition_variable cv;
+std::queue<std::vector<int>> work_queue;
+std::atomic<int> solutions_found(0);
+std::atomic<bool> finished(false);
+
+int board_size;
+
+bool is_safe(const std::vector<int>& board) {
+    for (int i = 0; i < board.size(); i++) {
+        for (int j = i + 1; j < board.size(); j++) {
+            if (std::abs(board[i] - board[j]) == j - i || board[i] == board[j]) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
-void solve_nqueens(const bitset<64>& occupied_rows, const bitset<64>& occupied_diagonals1, const bitset<64>& occupied_diagonals2, int col) {
-    if (col == board_size) {
-        solutions_found++;
-        return;
-    }
-
-    bitset<64> new_occupied_rows = occupied_rows;
-    bitset<64> new_occupied_diagonals1 = occupied_diagonals1;
-    bitset<64> new_occupied_diagonals2 = occupied_diagonals2;
-
-    for (int row = 0; row < board_size; row++) {
-        if (is_safe(occupied_rows, occupied_diagonals1, occupied_diagonals2, row, col)) {
-            new_occupied_rows.set(row);
-            new_occupied_diagonals1.set(row + col);
-            new_occupied_diagonals2.set(row - col + board_size - 1);
-
-            solve_nqueens(new_occupied_rows, new_occupied_diagonals1, new_occupied_diagonals2, col + 1);
-
-            new_occupied_rows.reset(row);
-            new_occupied_diagonals1.reset(row + col);
-            new_occupied_diagonals2.reset(row - col + board_size - 1);
+void worker_thread() {
+    while (!finished) {
+        std::vector<int> partial_solution;
+        {
+            std::unique_lock<std::mutex> lck(mtx);
+            cv.wait(lck, [&] { return !work_queue.empty() || finished; });
+            if (finished && work_queue.empty()) {
+                return;
+            }
+            partial_solution = work_queue.front();
+            work_queue.pop();
         }
+
+        std::vector<int> solution = partial_solution;
+        std::vector<int> remaining(board_size - solution.size());
+        std::iota(remaining.begin(), remaining.end(), solution.empty() ? 1 : solution.back() + 1);
+
+        do {
+            solution.insert(solution.end(), remaining.begin(), remaining.end());
+            if (is_safe(solution)) {
+                solutions_found++;
+            }
+            solution.resize(partial_solution.size());
+        } while (std::next_permutation(remaining.begin(), remaining.end()));
     }
 }
 
 int main(int argc, char* argv[]) {
     if (argc > 1) {
-        board_size = stoi(argv[1]);
+        board_size = std::stoi(argv[1]);
     } else {
         board_size = 8;
     }
 
     auto start = high_resolution_clock::now();
 
-    vector<future<void>> futures;
-    int num_threads = thread::hardware_concurrency();
-
-    bitset<64> initial_occupied_rows, initial_occupied_diagonals1, initial_occupied_diagonals2;
+    int num_threads = std::thread::hardware_concurrency();
+    std::vector<std::thread> threads;
 
     for (int i = 0; i < num_threads; i++) {
-        futures.emplace_back(async(launch::async, solve_nqueens, initial_occupied_rows, initial_occupied_diagonals1, initial_occupied_diagonals2, i));
+        threads.emplace_back(worker_thread);
     }
 
-    for (auto& fut : futures) {
-        fut.get();
+    std::vector<int> initial_config;
+    work_queue.push(initial_config);
+
+    {
+        std::unique_lock<std::mutex> lck(mtx);
+        finished = true;
+    }
+    cv.notify_all();
+
+    for (auto& t : threads) {
+        t.join();
     }
 
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stop - start);
 
-    cout << "Number of queens: " << board_size << endl;
-    cout << "Total solutions found: " << solutions_found << endl;
+
+    std::cout << "Number of queens: " << board_size << std::endl;
+    std::cout << "Total solutions found: " << solutions_found << std::endl;
     cout << "Execution time: " << duration.count() << " milliseconds" << endl;
 
     return 0;
