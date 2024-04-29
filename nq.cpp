@@ -1,31 +1,23 @@
 #include <iostream>
 #include <vector>
-#include <queue>
 #include <thread>
 #include <atomic>
 #include <algorithm>
 #include <numeric>
-#include <mutex>
-#include <condition_variable>
 #include <chrono>
-#include <cstdlib> // For atoi
+#include <cstdlib>
+#include <future>
 
 using namespace std;
 using namespace chrono;
 
-
-std::mutex mtx;
-std::condition_variable cv;
-std::queue<std::vector<int>> work_queue;
-std::atomic<int> solutions_found(0);
-std::atomic<bool> finished(false);
-
 int board_size;
+atomic<int> solutions_found(0);
 
-bool is_safe(const std::vector<int>& board) {
+bool is_safe(const vector<int>& board) {
     for (int i = 0; i < board.size(); i++) {
         for (int j = i + 1; j < board.size(); j++) {
-            if (std::abs(board[i] - board[j]) == j - i || board[i] == board[j]) {
+            if (abs(board[i] - board[j]) == j - i || board[i] == board[j]) {
                 return false;
             }
         }
@@ -33,68 +25,45 @@ bool is_safe(const std::vector<int>& board) {
     return true;
 }
 
-void worker_thread() {
-    while (!finished) {
-        std::vector<int> partial_solution;
-        {
-            std::unique_lock<std::mutex> lck(mtx);
-            cv.wait(lck, [&] { return !work_queue.empty() || finished; });
-            if (finished && work_queue.empty()) {
-                return;
-            }
-            partial_solution = work_queue.front();
-            work_queue.pop();
+void solve_nqueens(const vector<int>& partial_solution) {
+    vector<int> solution = partial_solution;
+    vector<int> remaining(board_size - solution.size());
+    iota(remaining.begin(), remaining.end(), solution.empty() ? 1 : solution.back() + 1);
+
+    do {
+        solution.insert(solution.end(), remaining.begin(), remaining.end());
+        if (is_safe(solution)) {
+            solutions_found++;
         }
-
-        std::vector<int> solution = partial_solution;
-        std::vector<int> remaining(board_size - solution.size());
-        std::iota(remaining.begin(), remaining.end(), solution.empty() ? 1 : solution.back() + 1);
-
-        do {
-            solution.insert(solution.end(), remaining.begin(), remaining.end());
-            if (is_safe(solution)) {
-                solutions_found++;
-            }
-            solution.resize(partial_solution.size());
-        } while (std::next_permutation(remaining.begin(), remaining.end()));
-    }
+        solution.resize(partial_solution.size());
+    } while (next_permutation(remaining.begin(), remaining.end()));
 }
 
 int main(int argc, char* argv[]) {
     if (argc > 1) {
-        board_size = std::stoi(argv[1]);
+        board_size = stoi(argv[1]);
     } else {
         board_size = 8;
     }
 
     auto start = high_resolution_clock::now();
 
-    int num_threads = std::thread::hardware_concurrency();
-    std::vector<std::thread> threads;
+    vector<future<void>> futures;
+    int num_threads = thread::hardware_concurrency();
 
     for (int i = 0; i < num_threads; i++) {
-        threads.emplace_back(worker_thread);
+        futures.emplace_back(async(launch::async, solve_nqueens, vector<int>(i)));
     }
 
-    std::vector<int> initial_config;
-    work_queue.push(initial_config);
-
-    {
-        std::unique_lock<std::mutex> lck(mtx);
-        finished = true;
-    }
-    cv.notify_all();
-
-    for (auto& t : threads) {
-        t.join();
+    for (auto& fut : futures) {
+        fut.get();
     }
 
     auto stop = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(stop - start);
 
-
-    std::cout << "Number of queens: " << board_size << std::endl;
-    std::cout << "Total solutions found: " << solutions_found << std::endl;
+    cout << "Number of queens: " << board_size << endl;
+    cout << "Total solutions found: " << solutions_found << endl;
     cout << "Execution time: " << duration.count() << " milliseconds" << endl;
 
     return 0;
