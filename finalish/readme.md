@@ -19,6 +19,7 @@ This project explores various methods to solve the N-Queens problem, ranging fro
 - `run_queue_work_stealing.sh`: Script to compile and run the work-stealing solution.
 - `distributed_tasks.cpp`: Distributed solution using MPI.
 - `run_distributed_tasks.sh`: Script to compile and run the distributed MPI solution.
+- `run.sh`: Script to compile and run all the files at once. Used to generate the data for graphing between N from 1 to 20, cores from 1 to 4 and threads from 1 to 8
 
 ## Compilation and Execution
 
@@ -39,6 +40,7 @@ This project explores various methods to solve the N-Queens problem, ranging fro
 ### Queue Work Stealing
 
 1. **Compile and Run:**
+
    ```bash
    ./run_queue_work_stealing.sh [board_size]
    ```
@@ -48,17 +50,12 @@ This project explores various methods to solve the N-Queens problem, ranging fro
 ### Distributed Tasks (Using MPI)
 
 1. **Compile and Run:**
+
    ```bash
    ./run_distributed_tasks.sh
    ```
 
    - This script runs the MPI program with 4 processes and a board size of 15 by default. Adjust the script if different settings are needed.
-
-## Additional Notes
-
-- Ensure that all scripts have execute permissions. You may need to run `chmod +x <script_name.sh>` to set this.
-- The distributed solution requires an MPI environment configured and running on your system.
-- Performance can vary based on the hardware and specific configurations used.
 
 ## License
 

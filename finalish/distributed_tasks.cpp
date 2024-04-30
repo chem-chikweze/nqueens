@@ -68,13 +68,13 @@ int main(int argc, char *argv[])
     MPI_Reduce(&local_count, &global_count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
     auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<milliseconds>(stop - start);
+    auto duration = duration_cast<microseconds>(stop - start);
 
     if (rank == 0)
     {
         cout << "Number of queens: " << N << endl;
         cout << "Total solutions found: " << global_count << endl;
-        cout << "Execution time: " << duration.count() << " milliseconds" << endl;
+        cout << "Execution time: " << duration.count() << " microseconds" << endl;
     }
 
     delete[] board;
