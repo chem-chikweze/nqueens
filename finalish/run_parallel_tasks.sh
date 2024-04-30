@@ -1,17 +1,11 @@
 #!/bin/bash
 
-# Define the source code file and the output binary name
-SOURCE="parallel_tasks.cpp"
-OUTPUT="nqueens2"
-
-# Compile the C++ program
-g++ -std=c++11 -o $OUTPUT $SOURCE -lpthread
-
-# Check if the compilation was successful
-if [ $? -eq 0 ]; then
-    echo "Compilation successful."
-    # Run the compiled program
-    ./$OUTPUT
-else
-    echo "Compilation failed."
-fi
+g++ -std=c++11 -o parallel_pthreads parallel_tasks.cpp -lpthread
+echo "PARALLEL RUN PARALLEL TASKS"
+# Run the pthreads program for N from 1 to 20 with 1 to 8 threads
+for N in {1..15}; do
+  for threads in {1..8}; do
+    echo "Running N = $N with $threads threads"
+    ./parallel_pthreads $N $threads
+  done
+done

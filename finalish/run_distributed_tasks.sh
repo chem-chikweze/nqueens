@@ -1,8 +1,14 @@
 
 #!/bin/bash
 
-# Compiling the MPI program with C++11 standard
-mpicxx -std=c++11 -o nqueens_mpi distributed_tasks.cpp
 
-# Running the MPI program with 4 processes and board size of 15
-mpirun -np 4 ./nqueens_mpi 15
+# Compile the MPI program
+mpicxx -std=c++11 -o mpi_nqueens distributed_tasks.cpp
+echo "PARALLEL RUN DISTRIBUTED CORES"
+# Run the MPI program for N from 1 to 20 with 1 to 4 cores
+for N in {1..15}; do
+  for cores in {1..4}; do
+    echo "Running MPI N = $N with $cores cores"
+    mpirun -np $cores ./mpi_nqueens $N
+  done
+done

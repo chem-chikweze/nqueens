@@ -1,13 +1,10 @@
 #!/bin/bash
 
-# Compile the C++ code
-g++ -std=c++11 -o nq_seq sequential.cpp
-
-# Check if compilation was successful
-if [ $? -eq 0 ]; then
-    echo "Compilation successful"
-    # Run the compiled program and measure execution time
-    time ./nq_seq 4
-else
-    echo "Compilation failed"
-fi
+# Compile the sequential program
+g++ -std=c++11 -o sequential sequential.cpp
+echo "SEQUENTIAL RUN"
+# Run the sequential program for N from 1 to 20
+for N in {1..15}; do
+  echo "Running N = $N"
+  ./sequential $N
+done
